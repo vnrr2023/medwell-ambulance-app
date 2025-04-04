@@ -24,7 +24,8 @@
         "googleMaps": {
           "apiKey": "YOUR_API_KEY_HERE"
         }
-      }
+      },
+      "package": "com.vnrr.EMSapp"
     },
     "web": {
       "bundler": "metro",
@@ -45,6 +46,14 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "7e77943e-be44-4012-b46c-b8eda1d26433"
+      }
     }
   }
 }
