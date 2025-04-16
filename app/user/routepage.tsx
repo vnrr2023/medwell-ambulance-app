@@ -1,25 +1,32 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Linking, View, Text, Alert, Clipboard, TouchableOpacity } from "react-native"
+import { Linking, View, Text, Alert, Clipboard, TouchableOpacity, SafeAreaView } from "react-native"
 import MapView, { Polyline, Marker } from "react-native-maps"
-
+import { useFocusEffect } from '@react-navigation/native'
+import { useCallback } from 'react'
 import polyline from "@mapbox/polyline"
 import { StatusBar } from "expo-status-bar"
 import Loader from "@/components/loader"
 import { Phone, Clock, User, AlertCircle, Siren } from "lucide-react-native"
 import { Modalize } from "react-native-modalize"
 import { GestureHandlerRootView } from "react-native-gesture-handler"
+import AsyncStorage from "@react-native-async-storage/async-storage"
+import { ngrok_url } from "@/data/id"
+import axios from "axios"
+import * as Location from "expo-location"
 
-const INITIAL_POLYLINE =
-  "g`trBgfn{L{AtA{@|@Db@Lb@pAxBjHyFrIcGfBeAhAi@zA}@xAq@~BuAr@]lBy@~CmAz@QzDeA~Ac@nAWtH}@~BUdFWlDKtAGxDe@~Ce@jDc@b@HDKXK|BYfC@lPR|GBx@@NOXY`@YN{AR}@`A}CNm@Jw@d@wD\\uBECGGGMCO@SHOLMPEN?RHJLFH?Pd@R"
+
 
 const LiveTrackingMap = () => {
   const [routeCoords, setRouteCoords] = useState<any[]>([])
   const [driverLocation, setDriverLocation] = useState<any>(null)
   const [errorMsg, setErrorMsg] = useState<any>(null)
   const [eta, setEta] = useState("12 min")
+  const [location, setLocation] = useState<any>(null)
   const [isConnected, setIsConnected] = useState(false)
+  const [bookingId, setBookingId] = useState("")
+  const [polylineR,setPolylineR]=useState("")
   const [ambulanceDetails, setAmbulanceDetails] = useState({
     driverName: "Vivek Chouhan",
     vehicleNumber: "MH 01 AB 1234",
@@ -27,95 +34,139 @@ const LiveTrackingMap = () => {
     status: "Eating vadapav",
   })
 
-  const wsRef = useRef<WebSocket | null>(null)
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Setup WebSocket connection
-  useEffect(() => {
-    // Replace with your actual WebSocket server URL
-    const wsUrl = "wss://your-websocket-server.com/ambulance-tracking"
-
-    const connectWebSocket = () => {
-      try {
-        const ws = new WebSocket(wsUrl)
-
-        ws.onopen = () => {
-          console.log("WebSocket connection established")
-          setIsConnected(true)
-          setErrorMsg(null)
-        }
-
-        ws.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data)
-
-            // Assuming the server sends location data in this format
-            if (data.latitude && data.longitude) {
-              setDriverLocation({
-                latitude: data.latitude,
-                longitude: data.longitude,
-              })
-
-              // If the server also sends ETA, update it
-              if (data.eta) {
-                setEta(data.eta)
-              }
-            }
-          } catch (error) {
-            console.error("Error parsing WebSocket message:", error)
-          }
-        }
-
-        ws.onerror = (error) => {
-          console.error("WebSocket error:", error)
-          setErrorMsg("Connection error. Please try again.")
-        }
-
-        ws.onclose = (event) => {
-          console.log("WebSocket connection closed:", event.code, event.reason)
-          setIsConnected(false)
-
-          // Attempt to reconnect after a delay
-          setTimeout(() => {
-            if (wsRef.current?.readyState !== WebSocket.OPEN) {
-              connectWebSocket()
-            }
-          }, 5000)
-        }
-
-        wsRef.current = ws
-      } catch (error) {
-        console.error("Failed to connect to WebSocket:", error)
-        setErrorMsg("Failed to connect to tracking service")
-      }
+  const getBookingIdFromStorage = async () => {
+    try{
+      const id = await AsyncStorage.getItem("bookingId")
+        setBookingId(`${id}`)
+        return id
+    }catch(err){
+      console.log("booking id was not found",err)
     }
+    
+  }
 
-    connectWebSocket()
-
-    // Cleanup function to close WebSocket when component unmounts
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close()
+  const fetchLocationData = useCallback(async (id:any) => {
+    if (!id) return
+    
+    try {
+      console.log(id)
+      const response = await fetch(`${ngrok_url}/customer/current-location-ambulance/${id}`)
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`)
       }
+      
+      const data = await response.json()
+      console.log(data)
+      if (data && data.lat && data.lon) {
+        setDriverLocation({
+          latitude: data.lat,
+          longitude: data.lon,
+        })
+        setIsConnected(true)
+        setErrorMsg(null)
+        
+      }
+    } catch (error) {
+      console.error("Error fetching location data:", error)
+      setIsConnected(false)
+      setErrorMsg("Unable to fetch location updates. Please try again.")
+    }
+  }, [])
+  useEffect(() => {
+    const fetchPolyline = async () => {
+      try {
+        if (!driverLocation || !location) {
+          return;
+        }
+        
+        // const response = await axios.get(
+        //   `https://gmapsmedwell.vercel.app/get-encoded-polyline/${driverLocation.latitude}/${driverLocation.longitude}/18.952613555387067/72.82096453487598`
+        // );
+        const response = await axios.get(
+          `https://gmapsmedwell.vercel.app/get-encoded-polyline/${driverLocation.latitude}/${driverLocation.longitude}/${location.coords.latitude}/${location.coords.longitude}`
+        );
+        
+        const polylineData = response.data.polyline;
+        setPolylineR(polylineData);
+        
+        const decodedCoords = polyline.decode(polylineData).map(([lat, lng]) => ({
+          latitude: lat,
+          longitude: lng,
+        }));
+        setRouteCoords(decodedCoords);
+      } catch (error) {
+        console.error("Error fetching polyline:", error);
+      }
+    };
+  
+    fetchPolyline();
+  }, [location]); 
+
+  const startLocationPolling = useCallback((id:any) => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current)
+    }
+    
+    fetchLocationData(id) 
+    
+    pollingIntervalRef.current = setInterval(() => {
+      fetchLocationData(id)
+    }, 5000)
+    
+    console.log("Location polling started")
+  }, [fetchLocationData])
+
+  const stopLocationPolling = useCallback(() => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current)
+      pollingIntervalRef.current = null
+      setIsConnected(false)
+      console.log("Location polling stopped")
     }
   }, [])
 
-  // Decode polyline on component mount
+  useFocusEffect(
+    useCallback(() => {
+      console.log("Screen focused, starting location polling")
+      
+      const initialize = async () => {
+        const id = await getBookingIdFromStorage()
+        startLocationPolling(id)
+      }
+      
+      initialize()
+      
+      // When screen goes out of focus, stop polling
+      return () => {
+        console.log("Screen unfocused, stopping location polling")
+        stopLocationPolling()
+      }
+    }, [startLocationPolling, stopLocationPolling])
+  )
+
+  // Initialize the route coordinates from the polyline
   useEffect(() => {
-    const decodedCoords = polyline.decode(INITIAL_POLYLINE).map(([lat, lng]) => ({
+    const decodedCoords = polyline.decode(polylineR).map(([lat, lng]) => ({
       latitude: lat,
       longitude: lng,
     }))
     setRouteCoords(decodedCoords)
   }, [])
 
-  // Update route based on driver location
+  // Update route when driver location changes
   useEffect(() => {
     if (!driverLocation || routeCoords.length === 0) return
 
-    while (routeCoords.length > 1 && getDistance(routeCoords[0], driverLocation) < 5) {
-      routeCoords.shift()
+    // Remove passed points from the route
+    const updatedRoute = [...routeCoords]
+    while (updatedRoute.length > 1 && getDistance(updatedRoute[0], driverLocation) < 5) {
+      updatedRoute.shift()
     }
-    setRouteCoords([...routeCoords])
+    
+    setRouteCoords(updatedRoute)
   }, [driverLocation])
 
   const handleCallDriver = async () => {
@@ -133,22 +184,8 @@ const LiveTrackingMap = () => {
     }
   }
 
-  if (errorMsg) {
-    return (
-      <View className="flex-1 justify-center items-center">
-        <Text className="text-red-500 text-center px-4">{errorMsg}</Text>
-        <TouchableOpacity
-          className="mt-4 bg-blue-600 px-4 py-2 rounded-lg"
-          onPress={() => {
-            if (wsRef.current) wsRef.current.close()
-            setErrorMsg(null)
-          }}
-        >
-          <Text className="text-white">Retry Connection</Text>
-        </TouchableOpacity>
-      </View>
-    )
-  }
+
+
 
   if (!driverLocation) {
     return (
@@ -248,8 +285,7 @@ const getDistance = (pointA: any, pointB: any) => {
     Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) * Math.sin(dLng / 2)
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 
-  return R * c // Distance in meters
+  return R * c 
 }
 
 export default LiveTrackingMap
-

@@ -42,7 +42,7 @@ export default function Index() {
         </View>
         
         <View className="mt-16 items-center">
-          <Link href={"/ems/routepage"}>
+          <Link href={"/auth/signup/ambulance"}>
           <Image 
             source={require("@/assets/images/logo.png")} 
             style={{height: 50, width: 50}}

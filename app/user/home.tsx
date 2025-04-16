@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect,useCallback, useRef } from "react"
 import { View, Text, TouchableOpacity, Modal } from "react-native"
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from "react-native"
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps"
 import * as Location from "expo-location"
@@ -9,96 +10,205 @@ import { StatusBar } from "expo-status-bar"
 import { Modalize } from "react-native-modalize"
 import { GestureHandlerRootView } from "react-native-gesture-handler"
 import { Image } from "expo-image"
-import { useNavigation } from "expo-router"
+import { useNavigation, useFocusEffect, useRouter, Route } from "expo-router"
+import {  ngrok_url } from "@/data/id"
+import axios from "axios"
 
-const AMBULANCES = [
-  {
-    id: "1",
-    name: "Global Hospital Ambulance",
-    distance: "0.5 km",
-    eta: "2 min",
-    phone: "+91 22 6772 6772",
-    location: {
-      latitude: 40.7628,
-      longitude: 72.8422,
-    },
-  },
-  {
-    id: "2",
-    name: "Wadia Hospital Ambulance",
-    distance: "1.1 km",
-    eta: "4 min",
-    phone: "+91 22 2372 1111",
-    location: {
-      latitude: 18.9788,
-      longitude: 72.8395,
-    },
-  },
-  {
-    id: "3",
-    name: "Masina Hospital Emergency",
-    distance: "1.8 km",
-    eta: "7 min",
-    phone: "+91 22 6960 6060",
-    location: {
-      latitude: 18.9895,
-      longitude: 72.8324,
-    },
-  },
-  {
-    id: "4",
-    name: "J.J. Hospital Ambulance",
-    distance: "2.3 km",
-    eta: "9 min",
-    phone: "+91 22 2373 5555",
-    location: {
-      latitude: 18.9634,
-      longitude: 72.8351,
-    },
-  },
-  {
-    id: "5",
-    name: "KEM Hospital Ambulance",
-    distance: "3.1 km",
-    eta: "12 min",
-    phone: "+91 22 2410 7000",
-    location: {
-      latitude: 18.9895,
-      longitude: 72.8345,
-    },
-  },
-]
+type AmbulanceLocation = {
+  location: {
+    latitude: number
+    longitude: number
+  }
+  ambulanceId: string
+}
+
+type Ambulance = {
+  id: string
+  name: string
+  distance: string
+  eta: string
+  phone: string
+  location: {
+    latitude: number
+    longitude: number
+  }
+}
 
 export default function Home() {
   const [location, setLocation] = useState<any>(null)
   const [errorMsg, setErrorMsg] = useState<any>(null)
-  const [ambulanceType, setAmbulanceType] = useState<"xl" | "mini" | null>(null)
+  const [ambulanceType, setAmbulanceType] = useState<"XL" | "MINI" | null>(null)
   const [showConfirmation, setShowConfirmation] = useState(false)
-  const navigation=useNavigation<any>()
+  const [ambulances, setAmbulances] = useState<Ambulance[]>([])
+  const [ambulanceIds, setAmbulanceIds] = useState<string[]>([])
+  const router = useRouter()
   const mapRef = useRef<any>(null)
+  const webSocketRef = useRef<WebSocket | null>(null)
+  const intervalRef = useRef<NodeJS.Timeout | null>(null)
+  
+  const fetchNearbyAmbulances = async (latitude: number, longitude: number) => {
+    try {
+      const response = await axios.get(`${ngrok_url}/customer/get-nearby-ambulances/${latitude}/${longitude}`)
+      // const response = await axios.get(`${ngrok_url}/customer/get-nearby-ambulances/18.952613555387067/72.82096453487598`)
 
-  useEffect(() => {
-    ;(async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync()
-      if (status !== "granted") {
-        setErrorMsg("Permission to access location was denied")
-        return
+      const nearbyAmbulances = response.data.map((ambulance: any, index: number) => ({
+        id: ambulance.ambulanceId || `amb-${index}`,
+        name: ambulance.name || `Ambulance ${index + 1}`,
+        distance: ambulance.distance || "Calculating...",
+        eta: ambulance.eta || "Calculating...",
+        phone: ambulance.phone || "Not available",
+        location: {
+          latitude: ambulance.location?.latitude || 0,
+          longitude: ambulance.location?.longitude || 0,
+        },
+      }))
+
+      const ids = nearbyAmbulances.map((amb: Ambulance) => amb.id)
+      setAmbulanceIds(ids)
+      setAmbulances(nearbyAmbulances)
+
+      return nearbyAmbulances
+    } catch (error) {
+      console.error("Error fetching nearby ambulances:", error)
+      return []
+    }
+  }
+
+  const connectWebSocket = (idList: string[]) => {
+    if (webSocketRef.current) {
+      webSocketRef.current.close()
+    }
+
+    const domain = ngrok_url.replace(/^https?:\/\//, "")
+    const wsUrl = `ws://${domain}/nearby-ambulance-locations`
+    console.log("Connecting to WebSocket:", wsUrl)
+
+    const ws = new WebSocket(wsUrl)
+    webSocketRef.current = ws
+
+    ws.onopen = () => {
+      console.log("WebSocket Connected")
+      ws.send(JSON.stringify({ idList }))
+      console.log("Sent idList to WebSocket")
+
+      intervalRef.current = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ idList }))
+          console.log("Sent idList again to WebSocket")
+        }
+      }, 10000)
+    }
+
+    ws.onmessage = (event) => {
+      try {
+        console.log("WebSocket received data:", event.data)
+        const data = JSON.parse(event.data) as AmbulanceLocation[]
+
+        if (Array.isArray(data) && data.length > 0) {
+          setAmbulances((prevAmbulances) =>
+            prevAmbulances.map((amb) => {
+              const update = data.find((item) => item.ambulanceId === amb.id)
+              return update
+                ? {
+                    ...amb,
+                    location: {
+                      latitude: update.location.latitude,
+                      longitude: update.location.longitude,
+                    },
+                  }
+                : amb
+            })
+          )
+        }
+      } catch (error) {
+        console.error("Error parsing WebSocket data:", error)
+      }
+    }
+
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error)
+    }
+
+    ws.onclose = (event) => {
+      console.log("WebSocket disconnected:", event.code, event.reason)
+
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+      }
+    }
+  }
+
+  useFocusEffect(
+    useCallback(() => {
+      
+      const fetchLocationAndAmbulances = async () => {
+        const customerID=await AsyncStorage.getItem("customerID")
+        if (!customerID){
+          router.push('/auth/signup/CUSTOMER');
+          return
+        }
+        const { status } = await Location.requestForegroundPermissionsAsync()
+        if (status !== "granted") {
+          setErrorMsg("Permission to access location was denied")
+          return
+        }
+
+        const location = await Location.getCurrentPositionAsync({})
+        setLocation(location)
+
+        if (location?.coords ) {
+          const nearbyAmbulances = await fetchNearbyAmbulances(location.coords.latitude, location.coords.longitude)
+          const ids = nearbyAmbulances.map((amb: Ambulance) => amb.id)
+          connectWebSocket(ids)
+        }
       }
 
-      const location = await Location.getCurrentPositionAsync({})
-      setLocation(location)
-    })()
-  }, [])
+      fetchLocationAndAmbulances()
 
-  const handleAmbulanceSelect = (type: "xl" | "mini") => {
+      return () => {
+        if (webSocketRef.current) {
+          webSocketRef.current.close()
+        }
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current)
+        }
+      }
+    }, [])
+  )
+
+  const handleAmbulanceSelect = (type: "XL" | "MINI") => {
     setAmbulanceType(type)
     setShowConfirmation(true)
   }
 
-  const confirmBooking = () => {
-    navigation.navigate("user/routepage")
+  const confirmBooking = async () => {
+    const customerID=await AsyncStorage.getItem("customerID")
+    const data = {
+      customerId: customerID,
+      lat: location.coords.latitude,
+      lon: location.coords.longitude,
+      ambulanceType,
+    }
+    // const data = {
+    //   customerId: customerID,
+    //   lat: 18.952613555387067,
+    //   lon: 72.82096453487598,
+    //   ambulanceType,
+    // }
+
+
+    try {
+      const response = await axios.post(`${ngrok_url}/customer/request-booking`, data)
+      console.log(response.data)
+      const bookingId = response.data.bookingId
+      await AsyncStorage.setItem("bookingId", bookingId)
+      router.push("/user/routepage")
+    } catch (error) {
+      console.log("Booking Error " + error)
+    }
+
+    router.push("/user/routepage")
     setShowConfirmation(false)
-    // Additional booking confirmation logic
   }
 
   let initialRegion = {
@@ -136,7 +246,7 @@ export default function Home() {
               showsUserLocation
               showsMyLocationButton
             >
-              {AMBULANCES.map((ambulance) => (
+              {ambulances.map((ambulance) => (
                 <Marker
                   key={ambulance.id}
                   coordinate={ambulance.location}
@@ -161,15 +271,15 @@ export default function Home() {
             >
               <View className="px-4 py-2 border-b border-gray-200">
                 <Text className="text-xl font-bold">Book an Ambulance</Text>
-                <Text className="text-gray-500">{AMBULANCES.length} ambulances available</Text>
+                <Text className="text-gray-500">{ambulances.length} ambulances available</Text>
               </View>
 
               <View className="px-4 py-4">
                 <Text className="text-xl font-bold mb-4">Select Ambulance Type</Text>
                 <View className="flex-row justify-between">
                   <TouchableOpacity
-                    className={`w-[48%] border-2 rounded-xl p-3 ${ambulanceType === "xl" ? "border-red-500" : "border-gray-200"}`}
-                    onPress={() => handleAmbulanceSelect("xl")}
+                    className={`w-[48%] border-2 rounded-xl p-3 ${ambulanceType === "XL" ? "border-red-500" : "border-gray-200"}`}
+                    onPress={() => handleAmbulanceSelect("XL")}
                   >
                     <View className="items-center justify-center">
                       <Image
@@ -184,8 +294,8 @@ export default function Home() {
                   </TouchableOpacity>
 
                   <TouchableOpacity
-                    className={`w-[48%] border-2 rounded-xl p-3 ${ambulanceType === "mini" ? "border-red-500" : "border-gray-200"}`}
-                    onPress={() => handleAmbulanceSelect("mini")}
+                    className={`w-[48%] border-2 rounded-xl p-3 ${ambulanceType === "MINI" ? "border-red-500" : "border-gray-200"}`}
+                    onPress={() => handleAmbulanceSelect("MINI")}
                   >
                     <View className="items-center justify-center">
                       <Image
@@ -224,7 +334,7 @@ export default function Home() {
                 <View className="bg-white p-6 rounded-xl w-[80%] items-center">
                   <Image
                     source={
-                      ambulanceType === "xl" ? require("@/assets/images/xl.png") : require("@/assets/images/mini.png")
+                      ambulanceType === "XL" ? require("@/assets/images/xl.png") : require("@/assets/images/mini.png")
                     }
                     style={{ width: 150, height: 100 }}
                     contentFit="contain"
@@ -255,4 +365,3 @@ export default function Home() {
     </GestureHandlerRootView>
   )
 }
-
