@@ -1,11 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { View, Text, TextInput, Image, TouchableOpacity, ActivityIndicator, SafeAreaView, Alert } from "react-native"
 import axios from "axios"
 import { ngrok_url } from "@/data/id"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import { useRouter } from "expo-router"
+
 export default function AmbulanceProfile() {
   const [loading, setLoading] = useState(false)
   const [ambulanceData, setAmbulanceData] = useState({
@@ -14,7 +15,24 @@ export default function AmbulanceProfile() {
     ambulanceBrandName: "",
     userId: "",
   })
-  const router=useRouter()
+  const router = useRouter()
+
+  // Load userId when component mounts
+  useEffect(() => {
+    const loadUserId = async () => {
+      try {
+        const userId = await AsyncStorage.getItem("ambulanceID")
+        if (userId) {
+          setAmbulanceData(prev => ({ ...prev, userId }))
+        }
+      } catch (error) {
+        console.error("Error loading user ID:", error)
+      }
+    }
+    
+    loadUserId()
+  }, [])
+
   const handleSubmit = async () => {
     if (!ambulanceData.ambulanceType || !ambulanceData.numberPlate || !ambulanceData.ambulanceBrandName) {
       Alert.alert("Error", "Please fill all the fields")
@@ -24,16 +42,16 @@ export default function AmbulanceProfile() {
     setLoading(true)
     
     try {
-    const jj=await AsyncStorage.getItem("ambulanceID") 
-    await AsyncStorage.setItem("ambulanceTYPE",ambulanceData.ambulanceType)
-    console.log(jj)
-    setAmbulanceData({ ...ambulanceData, userId:`${jj}`})
-    console.log(ambulanceData)
-      const response = await axios.post(ngrok_url+"/ambulance/complete-profile", ambulanceData)
-
+      // Store the ambulance type for future reference
+      await AsyncStorage.setItem("ambulanceTYPE", ambulanceData.ambulanceType)
+      
+      // Make API call with complete data
+      const response = await axios.post(ngrok_url + "/ambulance/complete-profile", ambulanceData)
+      
       console.log("Profile completed successfully:", response.data)
       Alert.alert("Success", "Ambulance profile completed successfully!")
-        router.push("/ems/home")
+      
+      router.push("/ems/home")
     } catch (error) {
       console.error("Error completing profile:", error)
       Alert.alert("Error", "Failed to complete profile. Please try again.")
@@ -98,4 +116,3 @@ export default function AmbulanceProfile() {
     </SafeAreaView>
   )
 }
-

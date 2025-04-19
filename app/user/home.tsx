@@ -189,6 +189,7 @@ export default function Home() {
       lon: location.coords.longitude,
       ambulanceType,
     }
+    console.log("bookuing", data)
     // const data = {
     //   customerId: customerID,
     //   lat: 18.952613555387067,
@@ -199,7 +200,7 @@ export default function Home() {
 
     try {
       const response = await axios.post(`${ngrok_url}/customer/request-booking`, data)
-      console.log(response.data)
+      console.log("booking response",response.data)
       const bookingId = response.data.bookingId
       await AsyncStorage.setItem("bookingId", bookingId)
       router.push("/user/routepage")

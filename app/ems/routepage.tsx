@@ -1,18 +1,22 @@
 "use client"
 
+import React from "react"
+
 import { useState, useEffect, useRef } from "react"
-import { View, Text, SafeAreaView, TouchableOpacity } from "react-native"
+import { View, Text, SafeAreaView, TouchableOpacity, Image, Animated, Linking } from "react-native"
 import MapView, { Polyline, Marker } from "react-native-maps"
 import * as Location from "expo-location"
 import polyline from "@mapbox/polyline"
 import { StatusBar } from "expo-status-bar"
 import Loader from "@/components/loader"
-import { Siren, MapPinned, ChevronRight } from "lucide-react-native"
+import { Siren, MapPinned, ChevronRight, Navigation } from "lucide-react-native"
 import { Modalize } from "react-native-modalize"
 import { GestureHandlerRootView } from "react-native-gesture-handler"
 import axios from "axios"
 import { ngrok_url } from "@/data/id"
-import { Link, useLocalSearchParams } from "expo-router"
+import { Link, useLocalSearchParams, useFocusEffect } from "expo-router"
+import * as turf from "@turf/turf"
+import AsyncStorage from "@react-native-async-storage/async-storage"
 
 const domain = ngrok_url.replace(/^https?:\/\//, "")
 const WEBSOCKET_URL = `ws://${domain}/send-real-time-location`
@@ -22,14 +26,52 @@ const LiveTrackingMap = () => {
   const [driverLocation, setDriverLocation] = useState<any>(null)
   const [errorMsg, setErrorMsg] = useState<any>(null)
   const [activeStatus, setActiveStatus] = useState<string>("EN_ROUTE")
-  const [polylineR, setPolylineR] = useState<string>("")
   const [location, setLocation] = useState<Location.LocationObject | null>(null)
-  const [polylineFetched, setPolylineFetched] = useState<boolean>(false)
   const [dropOffEnabled, setDropOffEnabled] = useState<boolean>(false)
   const wsRef = useRef<WebSocket | null>(null)
   const locationSubscriptionRef = useRef<Location.LocationSubscription | null>(null)
-  const { bookingId, pickupLat, pickupLon } = useLocalSearchParams()
+  const params = useLocalSearchParams()
+  const bookingId = params.bookingId as string
+  const pickupLat = params.pickupLat as string
+  const pickupLon = params.pickupLon as string
+  const routeToCustomer = params.routeToCustomer as string
+
   const dropOffModalRef = useRef<Modalize>(null)
+
+  const [prevCoords, setPrevCoords] = useState<any>(null)
+  const animatedValueX = useRef(new Animated.Value(0)).current
+  const animatedValueY = useRef(new Animated.Value(0)).current
+  const markerCoordinate = useRef({
+    latitude: 0,
+    longitude: 0,
+  }).current
+
+  const [googleMapsUrl, setGoogleMapsUrl] = useState<string | null>(null)
+
+  // Check for Google Maps URL in AsyncStorage when the component mounts or comes into focus
+  const checkForGoogleMapsUrl = async () => {
+    try {
+      const storedUrl = await AsyncStorage.getItem(`gmapsUrl_${bookingId}`)
+      if (storedUrl) {
+        console.log("Retrieved Google Maps URL from AsyncStorage:", storedUrl)
+        setGoogleMapsUrl(storedUrl)
+      }
+    } catch (error) {
+      console.error("Error retrieving Google Maps URL:", error)
+    }
+  }
+
+  useEffect(() => {
+    checkForGoogleMapsUrl()
+  }, [bookingId])
+
+  // Also check when the screen comes into focus (after returning from the drop-off picker)
+  useFocusEffect(
+    React.useCallback(() => {
+      checkForGoogleMapsUrl()
+      return () => {}
+    }, [bookingId]),
+  )
 
   useEffect(() => {
     if (!bookingId) return
@@ -59,7 +101,7 @@ const LiveTrackingMap = () => {
   }, [bookingId])
 
   useEffect(() => {
-    (async () => {
+    ;(async () => {
       const { status } = await Location.requestForegroundPermissionsAsync()
       if (status !== "granted") {
         setErrorMsg("Permission to access location was denied")
@@ -68,9 +110,9 @@ const LiveTrackingMap = () => {
 
       // Get initial position
       const initialLocation = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.BestForNavigation
+        accuracy: Location.Accuracy.BestForNavigation,
       })
-      
+
       setDriverLocation({
         latitude: initialLocation.coords.latitude,
         longitude: initialLocation.coords.longitude,
@@ -84,36 +126,20 @@ const LiveTrackingMap = () => {
   }, [bookingId])
 
   useEffect(() => {
-    const fetchPolyline = async () => {
-      try {
-        if (!driverLocation || polylineFetched) {
-          return
-        }
+    if (!driverLocation || !routeToCustomer) return
 
-        console.log("Fetching polyline...")
-        console.log(pickupLat, pickupLon)
-
-        const response = await axios.get(
-          `https://gmapsmedwell.vercel.app/get-encoded-polyline/${driverLocation.latitude}/${driverLocation.longitude}/${pickupLat}/${pickupLon}`
-        )
-        const polylineData = response.data.polyline
-        console.log("Polyline fetched:", polylineData)
-
-        setPolylineR(polylineData)
-        setPolylineFetched(true)
-
-        const decodedCoords = polyline.decode(polylineData).map(([lat, lng]) => ({
-          latitude: lat,
-          longitude: lng,
-        }))
-        setRouteCoords(decodedCoords)
-      } catch (error) {
-        console.error("Error fetching polyline:", error)
-      }
+    // Use the provided routeToCustomer directly
+    try {
+      const decodedCoords = polyline.decode(routeToCustomer).map(([lat, lng]) => ({
+        latitude: lat,
+        longitude: lng,
+      }))
+      setRouteCoords(decodedCoords)
+      console.log("Decoded polyline successfully:", routeToCustomer)
+    } catch (error) {
+      console.error("Error decoding polyline:", error)
     }
-
-    fetchPolyline()
-  }, [driverLocation, polylineFetched])
+  }, [driverLocation, routeToCustomer])
 
   useEffect(() => {
     if (!driverLocation || routeCoords.length === 0) return
@@ -143,28 +169,67 @@ const LiveTrackingMap = () => {
       const subscription = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.BestForNavigation,
-          distanceInterval: 5, // Only update if moved at least 5 meters
-          timeInterval: 100 // Minimum time between updates (3 seconds)
+          distanceInterval: 2, // Only update if moved at least 5 meters
+          timeInterval: 100, // Minimum time between updates
         },
         (newLocation) => {
-          // Update local state
-          setDriverLocation({
+          const newCoords = {
             latitude: newLocation.coords.latitude,
             longitude: newLocation.coords.longitude,
-          })
+          }
+
+          // Store previous coordinates before updating
+          if (driverLocation) {
+            setPrevCoords(driverLocation)
+          }
+
+          // Update local state
+          setDriverLocation(newCoords)
           setLocation(newLocation)
+
+          // Animate the marker movement
+          if (prevCoords) {
+            // Set initial position
+            markerCoordinate.latitude = prevCoords.latitude
+            markerCoordinate.longitude = prevCoords.longitude
+
+            // Reset animation values
+            animatedValueX.setValue(0)
+            animatedValueY.setValue(0)
+
+            // Calculate the distance between points
+            const from = turf.point([prevCoords.longitude, prevCoords.latitude])
+            const to = turf.point([newCoords.longitude, newCoords.latitude])
+            const distance = turf.distance(from, to, { units: "kilometers" })
+
+            // Adjust animation duration based on distance (faster for longer distances)
+            const duration = Math.min(Math.max(distance * 5000, 300), 1000)
+
+            // Start animation
+            Animated.timing(animatedValueX, {
+              toValue: 1,
+              duration: duration,
+              useNativeDriver: true,
+            }).start()
+
+            Animated.timing(animatedValueY, {
+              toValue: 1,
+              duration: duration,
+              useNativeDriver: true,
+            }).start()
+          }
 
           // Send to WebSocket if connection is open
           if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && bookingId) {
             const locationData = {
               bookingId: bookingId,
               lat: newLocation.coords.latitude,
-              lon: newLocation.coords.longitude
+              lon: newLocation.coords.longitude,
             }
             wsRef.current.send(JSON.stringify(locationData))
             console.log("Location sent via WebSocket:", locationData)
           }
-        }
+        },
       )
 
       // Store subscription reference for cleanup
@@ -183,19 +248,14 @@ const LiveTrackingMap = () => {
     try {
       const response = await axios.post(`${ngrok_url}/ambulance/update-booking-status`, {
         updatedStatus: status,
-        bookingId: bookingId
+        bookingId: bookingId,
       })
 
       console.log("Status updated successfully:", response.data)
       setActiveStatus(status)
 
-      // Enable/disable buttons based on new status
+      // Enable drop-off button after ARRIVED status
       if (status === "ARRIVED") {
-        // Enable IN_TRANSIT button, disable ARRIVED
-      } else if (status === "IN_TRANSIT") {
-        // Enable REACHED button, disable IN_TRANSIT
-      } else if (status === "REACHED") {
-        // Enable drop-off location option
         setDropOffEnabled(true)
       }
     } catch (error) {
@@ -213,6 +273,22 @@ const LiveTrackingMap = () => {
 
   const handleReached = () => {
     updateBookingStatus("REACHED")
+  }
+
+  const openGoogleMaps = () => {
+    if (googleMapsUrl) {
+      Linking.openURL(googleMapsUrl)
+    }
+  }
+
+  const clearGoogleMapsUrl = async () => {
+    try {
+      await AsyncStorage.removeItem(`gmapsUrl_${bookingId}`)
+      setGoogleMapsUrl(null)
+      console.log("Cleared Google Maps URL from AsyncStorage")
+    } catch (error) {
+      console.error("Error clearing Google Maps URL:", error)
+    }
   }
 
   if (errorMsg)
@@ -260,18 +336,43 @@ const LiveTrackingMap = () => {
               longitudeDelta: 0.005,
             }}
           >
-            {routeCoords.length > 0 && (
-              <Polyline coordinates={routeCoords} strokeWidth={5} strokeColor="blue" />
+            {routeCoords.length > 0 && <Polyline coordinates={routeCoords} strokeWidth={5} strokeColor="blue" />}
+            {driverLocation && prevCoords && (
+              <Marker.Animated
+                coordinate={{
+                  latitude: animatedValueY.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [prevCoords.latitude, driverLocation.latitude],
+                  }),
+                  longitude: animatedValueX.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [prevCoords.longitude, driverLocation.longitude],
+                  }),
+                }}
+                title="Driver"
+              >
+                <Image
+                  source={require("@/assets/images/mini.png")}
+                  style={{ width: 40, height: 40 }}
+                  resizeMode="contain"
+                />
+              </Marker.Animated>
             )}
-            <Marker 
-              coordinate={driverLocation} 
-              title="Driver"
-              pinColor="blue" // Make the driver marker blue
-            />
-            <Marker 
-              coordinate={{ latitude: Number(pickupLat), longitude: Number(pickupLon) }} 
+
+            {/* Fallback for initial render when prevCoords is null */}
+            {driverLocation && !prevCoords && (
+              <Marker coordinate={driverLocation} title="Driver">
+                <Image
+                  source={require("@/assets/images/mini.png")}
+                  style={{ width: 40, height: 40 }}
+                  resizeMode="contain"
+                />
+              </Marker>
+            )}
+            <Marker
+              coordinate={{ latitude: Number(pickupLat), longitude: Number(pickupLon) }}
               title="Destination"
-              pinColor="red" // Keep destination marker red (default)
+              pinColor="red"
             />
           </MapView>
         </View>
@@ -283,7 +384,7 @@ const LiveTrackingMap = () => {
           adjustToContentHeight
           scrollViewProps={{
             scrollEnabled: true,
-            nestedScrollEnabled: true
+            nestedScrollEnabled: true,
           }}
         >
           <View className="p-2">
@@ -293,66 +394,120 @@ const LiveTrackingMap = () => {
                 onPress={handleArrived}
                 disabled={isArrivedDisabled}
                 className={`flex-1 border-2 ${
-                  activeStatus === "ARRIVED" ? "bg-blue-600 border-blue-600" : 
-                  isArrivedDisabled ? "border-gray-300 bg-gray-100" : "border-blue-600"
+                  activeStatus === "ARRIVED"
+                    ? "bg-blue-600 border-blue-600"
+                    : isArrivedDisabled
+                      ? "border-gray-300 bg-gray-100"
+                      : "border-blue-600"
                 } py-3 px-2 rounded-lg justify-center`}
               >
-                <Text className={`${
-                  activeStatus === "ARRIVED" ? "text-white" : 
-                  isArrivedDisabled ? "text-gray-400" : "text-blue-600"
-                } font-medium text-center text-xl`}>ARRIVED</Text>
+                <Text
+                  className={`${
+                    activeStatus === "ARRIVED" ? "text-white" : isArrivedDisabled ? "text-gray-400" : "text-blue-600"
+                  } font-medium text-center text-xl`}
+                >
+                  ARRIVED
+                </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 onPress={handleInTransit}
                 disabled={isInTransitDisabled}
                 className={`flex-1 border-2 ${
-                  activeStatus === "IN_TRANSIT" ? "bg-teal-500 border-teal-500" : 
-                  isInTransitDisabled ? "border-gray-300 bg-gray-100" : "border-teal-500"
+                  activeStatus === "IN_TRANSIT"
+                    ? "bg-teal-500 border-teal-500"
+                    : isInTransitDisabled
+                      ? "border-gray-300 bg-gray-100"
+                      : "border-teal-500"
                 } py-3 px-2 rounded-lg justify-center`}
               >
-                <Text className={`${
-                  activeStatus === "IN_TRANSIT" ? "text-white" : 
-                  isInTransitDisabled ? "text-gray-400" : "text-teal-500"
-                } font-medium text-center text-xl`}>IN TRANSIT</Text>
+                <Text
+                  className={`${
+                    activeStatus === "IN_TRANSIT"
+                      ? "text-white"
+                      : isInTransitDisabled
+                        ? "text-gray-400"
+                        : "text-teal-500"
+                  } font-medium text-center text-xl`}
+                >
+                  IN TRANSIT
+                </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 onPress={handleReached}
                 disabled={isReachedDisabled}
                 className={`flex-1 border-2 ${
-                  activeStatus === "REACHED" ? "bg-green-600 border-green-600" : 
-                  isReachedDisabled ? "border-gray-300 bg-gray-100" : "border-green-600"
+                  activeStatus === "REACHED"
+                    ? "bg-green-600 border-green-600"
+                    : isReachedDisabled
+                      ? "border-gray-300 bg-gray-100"
+                      : "border-green-600"
                 } py-3 px-2 rounded-lg justify-center`}
               >
-                <Text className={`${
-                  activeStatus === "REACHED" ? "text-white" : 
-                  isReachedDisabled ? "text-gray-400" : "text-green-600"
-                } font-medium text-center text-xl`}>REACHED</Text>
+                <Text
+                  className={`${
+                    activeStatus === "REACHED" ? "text-white" : isReachedDisabled ? "text-gray-400" : "text-green-600"
+                  } font-medium text-center text-xl`}
+                >
+                  REACHED
+                </Text>
               </TouchableOpacity>
             </View>
             <View className="mb-2"></View>
-          </View>
-          <Link 
-            href={{ pathname: "/ems/DropOff", params: { bookingId: bookingId } }} 
-            asChild
-          >
-            <TouchableOpacity 
-              className={`${activeStatus === "REACHED" ? "bg-white" : "bg-gray-100"} rounded-xl mx-4 my-2.5 p-4 shadow-md border border-gray-200`}
-              disabled={activeStatus !== "REACHED"}
-            >
-              <View className="flex-row items-center">
-                <View className={`${activeStatus === "REACHED" ? "bg-blue-500" : "bg-gray-400"} w-11 h-11 rounded-full justify-center items-center mr-4`}>
-                  <MapPinned color="#fff" />
-                </View>
-                <View className="flex-1">
-                  <Text className={`text-base font-semibold ${activeStatus === "REACHED" ? "text-gray-800" : "text-gray-500"}`}>Set Drop-Off Location</Text>
-                  <Text className="text-xs text-gray-500 mt-0.5">Select destination for ambulance</Text>
-                </View>
-                <ChevronRight color={activeStatus === "REACHED" ? "#2196F3" : "#9E9E9E"} />
+            {googleMapsUrl && (
+              <View>
+                
+                <TouchableOpacity
+                  onPress={openGoogleMaps}
+                  className="bg-green-500 rounded-xl mx-4 p-4 shadow-md border border-gray-200"
+                >
+                  <View className="flex-row items-center">
+                    <View className="bg-white w-11 h-11 rounded-full justify-center items-center mr-4">
+                      <Navigation color="#22c55e" />
+                    </View>
+                    <View className="flex-1">
+                      <Text className="text-base font-semibold text-white">Open in Google Maps</Text>
+                      <Text className="text-xs text-white/80 mt-0.5">Navigate to destination</Text>
+                    </View>
+                    <ChevronRight color="white" />
+                  </View>
+                </TouchableOpacity>
+                <Link className="pl-4" href={{ pathname: "/ems/DropOff", params: { bookingId: bookingId } }}>
+                        <Text className="font-semibold text-blue-500">Change Drop-off Location?</Text>
+                </Link>
               </View>
-            </TouchableOpacity>
-          </Link>
+            )}
+            <Link href={{ pathname: "/ems/DropOff", params: { bookingId: bookingId } }} asChild>
+              <TouchableOpacity
+                className={`${activeStatus === "ARRIVED" || activeStatus === "IN_TRANSIT" || activeStatus === "REACHED" ? "bg-white" : "bg-gray-100"} rounded-xl mx-4 my-2.5 p-4 shadow-md border border-gray-200`}
+                disabled={!(activeStatus === "ARRIVED" || activeStatus === "IN_TRANSIT" || activeStatus === "REACHED")}
+              >
+                <View className="flex-row items-center">
+                  <View
+                    className={`${activeStatus === "ARRIVED" || activeStatus === "IN_TRANSIT" || activeStatus === "REACHED" ? "bg-blue-500" : "bg-gray-400"} w-11 h-11 rounded-full justify-center items-center mr-4`}
+                  >
+                    <MapPinned color="#fff" />
+                  </View>
+                  <View className="flex-1">
+                    <Text
+                      className={`text-base font-semibold ${activeStatus === "ARRIVED" || activeStatus === "IN_TRANSIT" || activeStatus === "REACHED" ? "text-gray-800" : "text-gray-500"}`}
+                    >
+                      Set Drop-Off Location
+                    </Text>
+                    <Text className="text-xs text-gray-500 mt-0.5">Select destination for ambulance</Text>
+                  </View>
+                  <ChevronRight
+                    color={
+                      activeStatus === "ARRIVED" || activeStatus === "IN_TRANSIT" || activeStatus === "REACHED"
+                        ? "#2196F3"
+                        : "#9E9E9E"
+                    }
+                  />
+                </View>
+              </TouchableOpacity>
+            </Link>
+          </View>
         </Modalize>
       </SafeAreaView>
     </GestureHandlerRootView>

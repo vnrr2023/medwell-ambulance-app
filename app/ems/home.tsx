@@ -242,10 +242,11 @@ export default function Home() {
     console.log(datas)
     try {
       const response = await axios.post(ngrok_url + "/ambulance/accept-booking", datas)
+      console.log("booking response while accept",response.data)
       console.log(emergency.coordinates.latitude, emergency.coordinates.longitude)
       router.push({
         pathname: "/ems/routepage",
-        params: {bookingId:emergency.bookingId, pickupLat: emergency.coordinates.latitude, pickupLon: emergency.coordinates.longitude },
+        params: {bookingId:emergency.bookingId, pickupLat: emergency.coordinates.latitude, pickupLon: emergency.coordinates.longitude, routeToCustomer: response.data.booking.routeToCustomer },
       })
     } catch (error) {
       console.log("Error while accepting emergency", error)
