@@ -1,8 +1,7 @@
 "use client"
 
 import React from "react"
-
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { View, Text, SafeAreaView, TouchableOpacity, Image, Animated, Linking } from "react-native"
 import MapView, { Polyline, Marker } from "react-native-maps"
 import * as Location from "expo-location"
@@ -35,6 +34,9 @@ const LiveTrackingMap = () => {
   const pickupLat = params.pickupLat as string
   const pickupLon = params.pickupLon as string
   const routeToCustomer = params.routeToCustomer as string
+  
+  // Add a ref to keep track of the original full route
+  const originalRouteRef = useRef<any[]>([])
 
   const dropOffModalRef = useRef<Modalize>(null)
 
@@ -60,6 +62,56 @@ const LiveTrackingMap = () => {
       console.error("Error retrieving Google Maps URL:", error)
     }
   }
+
+  // Decode polyline once when component mounts
+  useEffect(() => {
+    if (routeToCustomer) {
+      try {
+        const decodedCoords = polyline.decode(routeToCustomer).map(([lat, lng]) => ({
+          latitude: lat,
+          longitude: lng,
+        }))
+        
+        // Store the full route in our ref
+        originalRouteRef.current = decodedCoords
+        // Set the initial route
+        setRouteCoords(decodedCoords)
+        console.log("Decoded polyline successfully:", decodedCoords.length, "points")
+      } catch (error) {
+        console.error("Error decoding polyline:", error)
+      }
+    }
+  }, [routeToCustomer])
+
+  // Separate effect to update the route as driver progresses
+  const updateRouteBasedOnDriverLocation = useCallback(() => {
+    if (!driverLocation || routeCoords.length === 0) return
+    
+    // Find the nearest point on the route that is at least X meters away from the driver
+    // This is more efficient than checking each point
+    const thresholdDistance = 5; // 5 meters
+    let newStartIndex = 0;
+    
+    for (let i = 0; i < routeCoords.length; i++) {
+      const distance = getDistance(routeCoords[i], driverLocation);
+      
+      if (distance > thresholdDistance) {
+        newStartIndex = Math.max(0, i - 1); // Keep one point before the threshold
+        break;
+      }
+    }
+    
+    // Only update if we need to remove points
+    if (newStartIndex > 0) {
+      setRouteCoords(routeCoords.slice(newStartIndex));
+      console.log(`Removed ${newStartIndex} points from route. ${routeCoords.length - newStartIndex} points remaining.`);
+    }
+  }, [driverLocation, routeCoords]);
+
+  // Call the update function when driver location changes
+  useEffect(() => {
+    updateRouteBasedOnDriverLocation();
+  }, [driverLocation, updateRouteBasedOnDriverLocation]);
 
   useEffect(() => {
     checkForGoogleMapsUrl()
@@ -125,39 +177,6 @@ const LiveTrackingMap = () => {
     })()
   }, [bookingId])
 
-  useEffect(() => {
-    if (!driverLocation || !routeToCustomer) return
-
-    // Use the provided routeToCustomer directly
-    try {
-      const decodedCoords = polyline.decode(routeToCustomer).map(([lat, lng]) => ({
-        latitude: lat,
-        longitude: lng,
-      }))
-      setRouteCoords(decodedCoords)
-      console.log("Decoded polyline successfully:", routeToCustomer)
-    } catch (error) {
-      console.error("Error decoding polyline:", error)
-    }
-  }, [driverLocation, routeToCustomer])
-
-  useEffect(() => {
-    if (!driverLocation || routeCoords.length === 0) return
-
-    // Create a copy of the array first to avoid mutating the state directly
-    const updatedRouteCoords = [...routeCoords]
-    let changed = false
-
-    while (updatedRouteCoords.length > 1 && getDistance(updatedRouteCoords[0], driverLocation) < 5) {
-      updatedRouteCoords.shift()
-      changed = true
-    }
-
-    if (changed) {
-      setRouteCoords(updatedRouteCoords)
-    }
-  }, [driverLocation])
-
   const startLocationTracking = async () => {
     // Stop any existing subscription
     if (locationSubscriptionRef.current) {
@@ -169,7 +188,7 @@ const LiveTrackingMap = () => {
       const subscription = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.BestForNavigation,
-          distanceInterval: 2, // Only update if moved at least 5 meters
+          distanceInterval: 2, // Only update if moved at least 2 meters
           timeInterval: 100, // Minimum time between updates
         },
         (newLocation) => {
@@ -226,6 +245,7 @@ const LiveTrackingMap = () => {
               lat: newLocation.coords.latitude,
               lon: newLocation.coords.longitude,
             }
+            console.log("ss")
             wsRef.current.send(JSON.stringify(locationData))
             console.log("Location sent via WebSocket:", locationData)
           }
@@ -238,6 +258,14 @@ const LiveTrackingMap = () => {
       console.error("Error setting up location tracking:", error)
     }
   }
+
+  // Add a function to reset the route to original if needed
+  const resetRouteToOriginal = () => {
+    if (originalRouteRef.current.length > 0) {
+      setRouteCoords([...originalRouteRef.current]);
+      console.log("Route reset to original with", originalRouteRef.current.length, "points");
+    }
+  };
 
   const updateBookingStatus = async (status: string) => {
     if (!bookingId) {

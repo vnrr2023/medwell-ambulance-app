@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Linking, View, Text, Alert, Clipboard, TouchableOpacity, Image } from "react-native"
 import MapView, { Polyline, Marker, PROVIDER_GOOGLE } from "react-native-maps"
-import { useFocusEffect } from "@react-navigation/native"
 import polyline from "@mapbox/polyline"
 import { StatusBar } from "expo-status-bar"
 import Loader from "@/components/loader"
@@ -13,7 +12,9 @@ import { GestureHandlerRootView } from "react-native-gesture-handler"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import { ngrok_url } from "@/data/id"
 import * as Location from "expo-location"
+import axios from "axios"
 
+// Add the dummy polyline constant
 const dummyPolyline = "_iwrBwxq{L@?"
 
 const LiveTrackingMap = () => {
@@ -24,7 +25,6 @@ const LiveTrackingMap = () => {
   const [location, setLocation] = useState<any>(null)
   const [isConnected, setIsConnected] = useState(false)
   const [bookingId, setBookingId] = useState("")
-  const [polylineR, setPolylineR] = useState("")
   const [imageLoaded, setImageLoaded] = useState(false)
   const [ambulanceDetails, setAmbulanceDetails] = useState({
     driverName: "Vivek Chouhan",
@@ -39,11 +39,10 @@ const LiveTrackingMap = () => {
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const markerRef = useRef(null)
   const prevLocationRef: any = useRef(null)
+  const prevRouteUpdateRef: any = useRef(null)
   const mapRef: any = useRef(null)
-  // Add a ref to track animation frame IDs for cleanup
-  const animationFrameIdRef = useRef<number | null>(null)
-  // Add a ref to track if we're currently animating
-  const isAnimatingRef = useRef(false)
+  const bookingDetailsFetchedRef = useRef(false)
+  const driverLocationSetOnceRef = useRef(false)
 
   // Get user's current location
   useEffect(() => {
@@ -53,15 +52,22 @@ const LiveTrackingMap = () => {
         setErrorMsg("Permission to access location was denied")
         return
       }
+      const id = await getBookingIdFromStorage()
+      console.log("booker", id)
 
       const userLocation = await Location.getCurrentPositionAsync({})
       setLocation(userLocation)
+      // setLocation({ latitude: 18.952613555387067, longitude: 72.82096453487598 })
 
       // Set destination as user's current location
       setDestinationLocation({
         latitude: userLocation.coords.latitude,
         longitude: userLocation.coords.longitude,
       })
+      // setDestinationLocation({
+      //   latitude: 18.952613555387067,
+      //   longitude: 72.82096453487598,
+      // })
     })()
   }, [])
 
@@ -72,27 +78,59 @@ const LiveTrackingMap = () => {
       return id
     } catch (err) {
       console.log("booking id was not found", err)
+      return null
     }
   }
 
-  // Modified fetchLocationData to prevent unnecessary state updates
-  const fetchLocationData = useCallback(
-    async (id: any) => {
-      if (!id) return
-
-      // Don't fetch new data if we're currently animating
-      if (isAnimatingRef.current) {
-        return
+  // Fetch booking details function - will be called only once after driver location is set
+  const fetchBookingDetails = useCallback(async (id:any) => {
+    if (!id || bookingDetailsFetchedRef.current) return
+    
+    try {
+      console.log("Fetching booking details...")
+      bookingDetailsFetchedRef.current = true
+      const response = await axios.get(`${ngrok_url}/customer/booking-details/${id}`)
+      console.log("booking details response", response.data.routeToCustomer)
+      
+      if (response.data.routeToCustomer) {
+        const decodedCoords = polyline.decode(response.data.routeToCustomer).map(([lat, lng]) => ({
+          latitude: lat,
+          longitude: lng,
+        }))
+        setRouteCoords(decodedCoords)
+        console.log("Route polyline decoded successfully")
       }
+    } catch (error) {
+      console.error("Error fetching booking details:", error)
+      bookingDetailsFetchedRef.current = false // Allow retry if failed
+    }
+  }, [])
 
-      try {
-        console.log(id)
-        const response = await fetch(`${ngrok_url}/customer/current-location-ambulance/${id}`)
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! Status: ${response.status}`)
+  // Effect to fetch booking details once after driver location is initially set
+  useEffect(() => {
+    const getBookingDetailsAfterDriverLocation = async () => {
+      // Only run this effect if we have driver location and haven't fetched booking details yet
+      if (driverLocation && !driverLocationSetOnceRef.current && !bookingDetailsFetchedRef.current) {
+        driverLocationSetOnceRef.current = true
+        const id = await getBookingIdFromStorage()
+        if (id) {
+          await fetchBookingDetails(id)
         }
+      }
+    }
+    
+    getBookingDetailsAfterDriverLocation()
+  }, [driverLocation, fetchBookingDetails])
 
+  // Modified fetchLocationData to NOT fetch booking details
+  const fetchLocationData = useCallback(async (id:any) => {
+    if (!id) return
+
+    try {
+      console.log(id)
+      const response = await fetch(`${ngrok_url}/customer/current-location-ambulance/${id}`)
+
+      if (response.ok) {
         const data = await response.json()
         console.log(data)
         if (data && data.lat && data.lon) {
@@ -101,43 +139,26 @@ const LiveTrackingMap = () => {
             longitude: data.lon,
           }
 
-          // Only update if location has actually changed and we're not currently animating
-          if (!driverLocation) {
-            // First update, set directly
-            setDriverLocation(newLocation)
-            prevLocationRef.current = newLocation
-          } else if (
-            !isAnimatingRef.current &&
-            (newLocation.latitude !== driverLocation.latitude || newLocation.longitude !== driverLocation.longitude)
-          ) {
-            // Store previous location before updating
-            prevLocationRef.current = { ...driverLocation }
-            setDriverLocation(newLocation)
-          }
-
+          // Directly set the new location without animation
+          setDriverLocation(newLocation)
+          prevLocationRef.current = newLocation
           setIsConnected(true)
           setErrorMsg(null)
         }
-      } catch (error) {
-        console.error("Error fetching location data:", error)
-        setIsConnected(false)
-        setErrorMsg("Unable to fetch location updates. Please try again.")
+      } else {
+        // For 400 errors, just log but don't show error to user
+        console.log(`HTTP error! Status: ${response.status}`)
+        // Keep showing loader by not setting error message
       }
-    },
-    [driverLocation],
-  )
-
-  useEffect(() => {
-    // Use the dummy polyline directly instead of fetching
-    const decodedCoords = polyline.decode(dummyPolyline).map(([lat, lng]) => ({
-      latitude: lat,
-      longitude: lng,
-    }))
-    setRouteCoords(decodedCoords)
-  }, [])
+    } catch (error) {
+      console.error("Error fetching location data:", error)
+      setIsConnected(false)
+      // Don't set error message to keep showing loader
+    }
+  }, []) // No dependencies needed anymore
 
   const startLocationPolling = useCallback(
-    (id: any) => {
+    (id:any) => {
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current)
       }
@@ -145,12 +166,13 @@ const LiveTrackingMap = () => {
       fetchLocationData(id)
 
       pollingIntervalRef.current = setInterval(() => {
+        console.log("s")
         fetchLocationData(id)
-      }, 5000)
+      }, 3000)
 
       console.log("Location polling started")
     },
-    [fetchLocationData],
+    [fetchLocationData]
   )
 
   const stopLocationPolling = useCallback(() => {
@@ -162,115 +184,49 @@ const LiveTrackingMap = () => {
     }
   }, [])
 
-  useFocusEffect(
-    useCallback(() => {
-      console.log("Screen focused, starting location polling")
+  useEffect(() => {
+    console.log("Initializing location polling")
 
-      const initialize = async () => {
-        const id = await getBookingIdFromStorage()
+    const initialize = async () => {
+      const id = await getBookingIdFromStorage()
+      if (id) {
+        // Start location polling - booking details will be fetched after driver location is set
         startLocationPolling(id)
       }
-
-      initialize()
-
-      // When screen goes out of focus, stop polling
-      return () => {
-        console.log("Screen unfocused, stopping location polling")
-        stopLocationPolling()
-      }
-    }, [startLocationPolling, stopLocationPolling]),
-  )
-
-  // Fixed animation useEffect to prevent infinite updates
-  useEffect(() => {
-    // If we don't have both current and previous locations, exit early
-    if (!driverLocation || !prevLocationRef.current) {
-      return
     }
 
-    // If current and previous locations are the same, no need to animate
-    if (
-      driverLocation.latitude === prevLocationRef.current.latitude &&
-      driverLocation.longitude === prevLocationRef.current.longitude
-    ) {
-      return
-    }
+    initialize()
 
-    // Set animating flag to true
-    isAnimatingRef.current = true
-
-    const duration = 3000 // Animation duration in ms
-    const start = Date.now()
-    const startLat = prevLocationRef.current.latitude
-    const startLng = prevLocationRef.current.longitude
-    const destLat = driverLocation.latitude
-    const destLng = driverLocation.longitude
-
-    // Store the final destination to avoid updating state during animation
-    const finalDestination = {
-      latitude: destLat,
-      longitude: destLng,
-    }
-
-    const animate = () => {
-      const now = Date.now()
-      const elapsed = now - start
-      const progress = Math.min(elapsed / duration, 1)
-
-      // Easing function for smoother animation
-      const easeProgress = 1 - Math.pow(1 - progress, 3)
-
-      const nextLat = startLat + (destLat - startLat) * easeProgress
-      const nextLng = startLng + (destLng - startLng) * easeProgress
-
-      // Create a new location object to avoid direct mutation
-      const animatedLocation = {
-        latitude: nextLat,
-        longitude: nextLng,
-      }
-
-      // Only update state if we're not at 100% progress
-      if (progress < 1) {
-        setDriverLocation(animatedLocation)
-        animationFrameIdRef.current = requestAnimationFrame(animate)
-      } else {
-        // At the end of animation, make sure we're at the exact final position
-        setDriverLocation(finalDestination)
-        // Mark animation as complete
-        isAnimatingRef.current = false
-      }
-    }
-
-    // Cancel any existing animation before starting a new one
-    if (animationFrameIdRef.current) {
-      cancelAnimationFrame(animationFrameIdRef.current)
-    }
-
-    // Start the animation
-    animationFrameIdRef.current = requestAnimationFrame(animate)
-
-    // Clean up animation frame on unmount or when dependencies change
+    // Only clean up when component unmounts
     return () => {
-      if (animationFrameIdRef.current) {
-        cancelAnimationFrame(animationFrameIdRef.current)
-        animationFrameIdRef.current = null
-      }
-      isAnimatingRef.current = false
+      console.log("Component unmounting, stopping location polling")
+      stopLocationPolling()
     }
-  }, [driverLocation])
+  }, [startLocationPolling, stopLocationPolling]) // These dependencies won't change
 
-  // Update route when driver location changes
+  // Carefully manage route updates to avoid infinite loops
   useEffect(() => {
     if (!driverLocation || routeCoords.length === 0) return
 
+    // Use stringified location to check if we've already processed this location
+    const locationKey = `${driverLocation.latitude},${driverLocation.longitude}`
+    if (prevRouteUpdateRef.current === locationKey) return
+    prevRouteUpdateRef.current = locationKey
+
     // Remove passed points from the route
     const updatedRoute = [...routeCoords]
+    let changed = false
+    
     while (updatedRoute.length > 1 && getDistance(updatedRoute[0], driverLocation) < 5) {
       updatedRoute.shift()
+      changed = true
     }
 
-    setRouteCoords(updatedRoute)
-  }, [driverLocation])
+    // Only update state if the route actually changed
+    if (changed) {
+      setRouteCoords(updatedRoute)
+    }
+  }, [driverLocation, routeCoords])
 
   const handleCallDriver = async () => {
     const phoneNumber = ambulanceDetails.phoneNumber
@@ -350,7 +306,6 @@ const LiveTrackingMap = () => {
                 height: 40,
                 justifyContent: "center",
                 alignItems: "center",
-               
               }}
             >
               {/* Try to load the image with error handling */}
@@ -414,7 +369,7 @@ const LiveTrackingMap = () => {
 }
 
 // Utility function to calculate distance (Haversine formula)
-const getDistance = (pointA: any, pointB: any) => {
+const getDistance = (pointA:any, pointB:any) => {
   const R = 6371000 // Radius of Earth in meters
   const lat1 = pointA.latitude * (Math.PI / 180)
   const lat2 = pointB.latitude * (Math.PI / 180)

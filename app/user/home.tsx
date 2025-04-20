@@ -158,6 +158,7 @@ export default function Home() {
 
         if (location?.coords ) {
           const nearbyAmbulances = await fetchNearbyAmbulances(location.coords.latitude, location.coords.longitude)
+          // const nearbyAmbulances = await fetchNearbyAmbulances(18.967150952658418, 72.84068598144172)
           const ids = nearbyAmbulances.map((amb: Ambulance) => amb.id)
           connectWebSocket(ids)
         }
@@ -189,13 +190,13 @@ export default function Home() {
       lon: location.coords.longitude,
       ambulanceType,
     }
-    console.log("bookuing", data)
     // const data = {
     //   customerId: customerID,
-    //   lat: 18.952613555387067,
-    //   lon: 72.82096453487598,
+    //   lat: 18.967150952658418, 
+    //   lon: 72.84068598144172,
     //   ambulanceType,
     // }
+    console.log("bookuing", data)
 
 
     try {
@@ -203,12 +204,11 @@ export default function Home() {
       console.log("booking response",response.data)
       const bookingId = response.data.bookingId
       await AsyncStorage.setItem("bookingId", bookingId)
-      router.push("/user/routepage")
+      router.push("/user/routepage",)
     } catch (error) {
       console.log("Booking Error " + error)
     }
 
-    router.push("/user/routepage")
     setShowConfirmation(false)
   }
 
@@ -221,8 +221,8 @@ export default function Home() {
 
   if (location) {
     initialRegion = {
-      latitude: location.coords.latitude,
-      longitude: location.coords.longitude,
+      latitude: 18.952613555387067,
+      longitude: 72.82096453487598,
       latitudeDelta: 0.01,
       longitudeDelta: 0.01,
     }
