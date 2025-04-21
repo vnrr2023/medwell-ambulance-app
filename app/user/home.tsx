@@ -255,7 +255,7 @@ export default function Home() {
                   description={`ETA: ${ambulance.eta}`}
                 >
                   <View className="bg-white p-2 rounded-full shadow-md">
-                    <Image source={require("@/assets/images/mini.png")} style={{ width: 24, height: 24 }} />
+                    <Image source={require("@/assets/images/top.png")} style={{ width: 24, height: 24 }} />
                   </View>
                 </Marker>
               ))}

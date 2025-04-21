@@ -380,7 +380,7 @@ const LiveTrackingMap = () => {
                 title="Driver"
               >
                 <Image
-                  source={require("@/assets/images/mini.png")}
+                  source={require("@/assets/images/top.png")}
                   style={{ width: 40, height: 40 }}
                   resizeMode="contain"
                 />
@@ -391,7 +391,7 @@ const LiveTrackingMap = () => {
             {driverLocation && !prevCoords && (
               <Marker coordinate={driverLocation} title="Driver">
                 <Image
-                  source={require("@/assets/images/mini.png")}
+                  source={require("@/assets/images/top.png")}
                   style={{ width: 40, height: 40 }}
                   resizeMode="contain"
                 />

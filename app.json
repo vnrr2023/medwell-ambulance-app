@@ -3,6 +3,11 @@
     "name": "EMSapp",
     "slug": "EMSapp",
     "version": "1.0.0",
+    "extra": {
+      "eas": {
+        "projectId": "your-project-id-from-expo"
+      }
+    },
     "orientation": "portrait",
     "icon": "./assets/images/logo.png",
     "scheme": "myapp",

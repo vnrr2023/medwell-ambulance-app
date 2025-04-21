@@ -310,7 +310,7 @@ const LiveTrackingMap = () => {
             >
               {/* Try to load the image with error handling */}
               <Image
-                source={require("@/assets/images/mini.png")}
+                source={require("@/assets/images/top.png")}
                 style={{ width: 32, height: 32 }}
                 onError={handleImageError}
                 onLoad={handleImageLoad}
