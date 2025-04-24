@@ -158,7 +158,7 @@ export default function Home() {
 
         if (location?.coords ) {
           const nearbyAmbulances = await fetchNearbyAmbulances(location.coords.latitude, location.coords.longitude)
-          // const nearbyAmbulances = await fetchNearbyAmbulances(18.967150952658418, 72.84068598144172)
+          // const nearbyAmbulances = await fetchNearbyAmbulances(18.952579974480976, 72.82088297218156)
           const ids = nearbyAmbulances.map((amb: Ambulance) => amb.id)
           connectWebSocket(ids)
         }
@@ -192,8 +192,8 @@ export default function Home() {
     }
     // const data = {
     //   customerId: customerID,
-    //   lat: 18.967150952658418, 
-    //   lon: 72.84068598144172,
+    //   lat: 18.952579974480976,  
+    //   lon: 72.82088297218156,
     //   ambulanceType,
     // }
     console.log("bookuing", data)

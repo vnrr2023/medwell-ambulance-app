@@ -3,11 +3,6 @@
     "name": "EMSapp",
     "slug": "EMSapp",
     "version": "1.0.0",
-    "extra": {
-      "eas": {
-        "projectId": "your-project-id-from-expo"
-      }
-    },
     "orientation": "portrait",
     "icon": "./assets/images/logo.png",
     "scheme": "myapp",
@@ -51,6 +46,14 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "7ce004d7-9ed4-4d5b-ae9f-a135900967f1"
+      }
     }
   }
 }

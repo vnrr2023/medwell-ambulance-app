@@ -30,10 +30,9 @@ const LiveTrackingMap = () => {
     driverName: "Vivek Chouhan",
     vehicleNumber: "MH 01 AB 1234",
     phoneNumber: "+91 9876543210",
-    status: "Eating vadapav",
+    status: "Driving",
   })
 
-  // Use null initially for destination location
   const [destinationLocation, setDestinationLocation] = useState<any>(null)
 
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
@@ -44,7 +43,6 @@ const LiveTrackingMap = () => {
   const bookingDetailsFetchedRef = useRef(false)
   const driverLocationSetOnceRef = useRef(false)
 
-  // Get user's current location
   useEffect(() => {
     ;(async () => {
       const { status } = await Location.requestForegroundPermissionsAsync()
@@ -57,7 +55,7 @@ const LiveTrackingMap = () => {
 
       const userLocation = await Location.getCurrentPositionAsync({})
       setLocation(userLocation)
-      // setLocation({ latitude: 18.952613555387067, longitude: 72.82096453487598 })
+      // setLocation({ latitude: 18.952579974480976,longitude: 72.82088297218156 })
 
       // Set destination as user's current location
       setDestinationLocation({
@@ -65,8 +63,8 @@ const LiveTrackingMap = () => {
         longitude: userLocation.coords.longitude,
       })
       // setDestinationLocation({
-      //   latitude: 18.952613555387067,
-      //   longitude: 72.82096453487598,
+      //   latitude:  18.952579974480976,
+      //   longitude:  72.82088297218156, 
       // })
     })()
   }, [])

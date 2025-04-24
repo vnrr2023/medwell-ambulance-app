@@ -42,7 +42,11 @@ export default function Index() {
         </View>
         
         <View className="mt-16 items-center">
-          <Link href={"/ems/fireed"}>
+        <Link
+        href={{
+          pathname: '/auth/signup/[role]',
+          params: { role: "AMBULANCE" },
+        }}>
           <Image 
             source={require("@/assets/images/logo.png")} 
             style={{height: 50, width: 50}}
