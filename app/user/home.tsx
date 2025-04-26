@@ -1,5 +1,3 @@
-"use client"
-
 import { useState, useEffect,useCallback, useRef } from "react"
 import { View, Text, TouchableOpacity, Modal } from "react-native"
 import AsyncStorage from '@react-native-async-storage/async-storage';

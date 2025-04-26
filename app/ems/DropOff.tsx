@@ -1,5 +1,3 @@
-"use client"
-
 import { useState, useEffect, useRef } from "react"
 import { View, Text, TouchableOpacity, ActivityIndicator, TextInput } from "react-native"
 import MapView, { Marker } from "react-native-maps"
@@ -8,8 +6,8 @@ import axios from "axios"
 import { StatusBar } from "expo-status-bar"
 import { ngrok_url } from "@/data/id"
 import { useLocalSearchParams, router } from "expo-router"
-import { Search, X } from "lucide-react-native"
 import AsyncStorage from "@react-native-async-storage/async-storage"
+import { Image } from 'expo-image';
 
 export default function DropoffLocationPicker() {
   const [location, setLocation] = useState<Location.LocationObjectCoords | null>(null)
@@ -164,11 +162,19 @@ export default function DropoffLocationPicker() {
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity className="p-2" onPress={() => setSearchQuery("")}>
-              <X size={20} color="#666" />
+              <Image
+                source={require("./../../assets/icons/x.svg")}
+                style={{ width: 20, height: 20, tintColor: "#666" }}
+                resizeMode="contain"
+              />
             </TouchableOpacity>
           )}
           <TouchableOpacity className="p-2 ml-1" onPress={handleSearch}>
-            <Search size={20} color="#666" />
+          <Image
+            source={require("./../../assets/icons/search.svg")}
+            style={{ width: 20, height: 20, tintColor: "#666" }}
+            resizeMode="contain"
+          />
           </TouchableOpacity>
         </View>
       </View>

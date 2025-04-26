@@ -1,12 +1,9 @@
-"use client"
-
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Linking, View, Text, Alert, Clipboard, TouchableOpacity, Image } from "react-native"
 import MapView, { Polyline, Marker, PROVIDER_GOOGLE } from "react-native-maps"
 import polyline from "@mapbox/polyline"
 import { StatusBar } from "expo-status-bar"
 import Loader from "@/components/loader"
-import { Phone, Clock, User, AlertCircle, Siren, Ambulance } from "lucide-react-native"
 import { Modalize } from "react-native-modalize"
 import { GestureHandlerRootView } from "react-native-gesture-handler"
 import AsyncStorage from "@react-native-async-storage/async-storage"
@@ -30,7 +27,7 @@ const LiveTrackingMap = () => {
     driverName: "Vivek Chouhan",
     vehicleNumber: "MH 01 AB 1234",
     phoneNumber: "+91 9876543210",
-    status: "Eating vadapav",
+    status: "Driving",
   })
 
   // Use null initially for destination location
@@ -269,14 +266,30 @@ const LiveTrackingMap = () => {
 
       {/* Top Bar */}
       <View className="bg-blue-600 px-4 py-3 shadow-md z-10 pt-10">
-        <Text className="text-white text-2xl font-bold text-center">
-          <Siren color="white" />
-          Have Patience
-          <Siren color="white" />
+        <View className="flex-row justify-center items-center gap-2">
+          <Image
+            source={require("./../../assets/icons/siren.svg")}
+            style={{ width: 24, height: 24, tintColor: "#fff" }}
+            resizeMode="contain"
+          />
+          <Text className="text-white text-2xl font-bold text-center">Have Patience</Text>
+          <Image
+            source={require("./../../assets/icons/siren.svg")}
+            style={{ width: 24, height: 24, tintColor: "#fff" }}
+            resizeMode="contain"
+          />
+        </View>
+
+        <Text className="text-white text-2xl font-bold text-center mt-1">
+          Ambulance is on the way
         </Text>
-        <Text className="text-white text-2xl font-bold text-center">Ambulance is on the way</Text>
-        <View className="flex flex-row justify-center gap-2 p-2">
-          <Clock color="white" />
+
+        <View className="flex flex-row justify-center gap-2 p-2 items-center">
+          <Image
+            source={require("./../../assets/icons/clock.svg")}
+            style={{ width: 20, height: 20, tintColor: "#fff" }}
+            resizeMode="contain"
+          />
           <Text className="text-white text-md text-center">
             ETA: {eta} {!isConnected && "(Reconnecting...)"}
           </Text>
@@ -317,7 +330,18 @@ const LiveTrackingMap = () => {
               />
 
               {/* Fallback icon if image fails to load */}
-              {!imageLoaded && <Ambulance size={24} color="#FF0000" style={{ position: "absolute" }} />}
+              {!imageLoaded && (
+                <Image
+                  source={require("./../../assets/icons/ambulance.svg")}
+                  style={{
+                    position: "absolute",
+                    width: 24,
+                    height: 24,
+                    tintColor: "#FF0000", 
+                  }}
+                  resizeMode="contain"
+                />
+              )}
             </View>
           </Marker>
 
@@ -338,17 +362,29 @@ const LiveTrackingMap = () => {
         <View className="bg-white px-4 py-3 shadow-lg border-t border-gray-200">
           <View className="flex-row items-center justify-between mb-2">
             <View className="flex-row items-center">
-              <User size={18} color="#666" />
+              <Image
+                source={require("./../../assets/icons/user.svg")}
+                style={{ width: 18, height: 18, tintColor: "#666" }}
+                resizeMode="contain"
+              />
               <Text className="text-gray-800 font-medium ml-2">{ambulanceDetails.driverName}</Text>
             </View>
             <View className="flex-row items-center">
-              <Clock size={18} color="#666" />
+              <Image
+                source={require("./../../assets/icons/clock.svg")}
+                style={{ width: 18, height: 18, tintColor: "#666" }}
+                resizeMode="contain"
+              />
               <Text className="text-gray-800 font-medium ml-2">{eta} away</Text>
             </View>
           </View>
 
           <View className="flex-row items-center mb-2">
-            <AlertCircle size={18} color="#666" />
+            <Image
+              source={require("./../../assets/icons/circle-alert.svg")}
+              style={{ width: 18, height: 18, tintColor: "#666" }}
+              resizeMode="contain"
+            />
             <Text className="text-gray-800 ml-2">{ambulanceDetails.vehicleNumber}</Text>
           </View>
 
@@ -358,7 +394,11 @@ const LiveTrackingMap = () => {
               onPress={handleCallDriver}
               className="bg-green-600 px-4 py-2 rounded-full flex-row items-center"
             >
-              <Phone size={16} color="white" />
+              <Image
+                source={require("./../../assets/icons/phone.svg")}
+                style={{ width: 16, height: 16, tintColor: "#fff" }}
+                resizeMode="contain"
+              />
               <Text className="text-white font-medium ml-2">Call Driver</Text>
             </TouchableOpacity>
           </View>

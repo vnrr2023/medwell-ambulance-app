@@ -1,7 +1,7 @@
 import { Link } from "expo-router";
 import { Text, View, TouchableOpacity, StatusBar } from "react-native";
-import { Ambulance, User } from "lucide-react-native";
 import { Image } from 'expo-image';
+
 export default function Index() {
   return (
     <View className="flex-1 bg-blue-500">
@@ -28,14 +28,23 @@ export default function Index() {
         <View className="w-full max-w-xs gap-6">
           <Link href={"/user/home"} asChild>
             <TouchableOpacity className="bg-white py-5 rounded-xl shadow-lg active:bg-gray-100 flex-row items-center justify-center">
-              <User size={24} color="#3b82f6" />
+            <Image
+              source={require("@/assets/icons/user.svg")}
+              style={{ width: 24, height: 24, tintColor: "#3b82f6" }}
+              resizeMode="contain"
+            />
+
               <Text className="text-blue-500 font-bold text-lg ml-2">User</Text>
             </TouchableOpacity>
           </Link>
           
           <Link href={"/ems/home"} asChild>
             <TouchableOpacity className="bg-blue-600 py-5 rounded-xl shadow-lg active:bg-blue-700 flex-row items-center justify-center">
-              <Ambulance size={24} color="white" />
+            <Image
+              source={require("@/assets/icons/ambulance.svg")}
+              style={{ width: 24, height: 24, tintColor: "#fff" }}
+              resizeMode="contain"
+            />
               <Text className="text-white font-bold text-lg ml-2">EMS</Text>
             </TouchableOpacity>
           </Link>

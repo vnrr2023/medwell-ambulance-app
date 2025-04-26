@@ -1,14 +1,12 @@
-"use client"
-
 import React, { useEffect, useRef, useState } from "react"
 import { Text, SafeAreaView, FlatList, View, TouchableOpacity } from "react-native"
 import { useFocusEffect } from "@react-navigation/native"
-import { Clock, Phone, ArrowRight, MapPin } from "lucide-react-native"
 import { ngrok_url } from "@/data/id"
 import axios from "axios"
 import * as Location from "expo-location"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import { useRouter } from "expo-router"
+import { Image } from 'expo-image';
 
 export default function Home() {
   const router = useRouter()
@@ -258,15 +256,27 @@ export default function Home() {
       <View className="p-4">
         <Text className="text-lg font-bold">Emergency #{item.id.substring(0, 8)}</Text>
         <View className="flex-row items-center mb-2">
-          <Clock size={16} color="#6b7280" />
+          <Image
+            source={require("./../../assets/icons/clock.svg")}
+            style={{ width: 16, height: 16, tintColor: "#6b7280" }}
+            resizeMode="contain"
+          />
           <Text className="text-gray-600 ml-2 text-sm">{item.timeReported}</Text>
         </View>
         <View className="flex-row items-center mb-2">
-          <MapPin size={16} color="#6b7280" />
+          <Image
+            source={require("./../../assets/icons/map-pin.svg")}
+            style={{ width: 16, height: 16, tintColor: "#6b7280" }}
+            resizeMode="contain"
+          />
           <Text className="text-gray-600 ml-2 text-sm">Distance: {Number.parseFloat(item.distance).toFixed(2)} km</Text>
         </View>
         <View className="flex-row items-center">
-          <Phone size={16} color="#6b7280" />
+          <Image
+            source={require("./../../assets/icons/phone.svg")}
+            style={{ width: 16, height: 16, tintColor: "#6b7280" }}
+            resizeMode="contain"
+          />
           <Text className="text-gray-600 ml-2">{item.contactNumber}</Text>
         </View>
         {item.otherAmbulances && item.otherAmbulances.length > 0 && (
@@ -280,7 +290,11 @@ export default function Home() {
         onPress={() => handleAcceptEmergency(item)}
       >
         <Text className="text-white font-bold text-center mr-2">ACCEPT EMERGENCY</Text>
-        <ArrowRight size={18} color="white" />
+        <Image
+            source={require("./../../assets/icons/arrow-right.svg")}
+            style={{ width: 18, height: 18, tintColor: "#fff" }}
+            resizeMode="contain"
+          />
       </TouchableOpacity>
     </View>
   )

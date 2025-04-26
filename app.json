@@ -8,6 +8,7 @@
         "projectId": "your-project-id-from-expo"
       }
     },
+    "assetBundlePatterns": ["**/*"],
     "orientation": "portrait",
     "icon": "./assets/images/logo.png",
     "scheme": "myapp",

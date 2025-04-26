@@ -1,14 +1,11 @@
-"use client"
-
 import React from "react"
 import { useState, useEffect, useRef, useCallback } from "react"
-import { View, Text, SafeAreaView, TouchableOpacity, Image, Animated, Linking } from "react-native"
+import { View, Text, SafeAreaView, TouchableOpacity, Image, Animated, Linking, Alert } from "react-native"
 import MapView, { Polyline, Marker } from "react-native-maps"
 import * as Location from "expo-location"
 import polyline from "@mapbox/polyline"
 import { StatusBar } from "expo-status-bar"
 import Loader from "@/components/loader"
-import { Siren, MapPinned, ChevronRight, Navigation } from "lucide-react-native"
 import { Modalize } from "react-native-modalize"
 import { GestureHandlerRootView } from "react-native-gesture-handler"
 import axios from "axios"
@@ -344,11 +341,26 @@ const LiveTrackingMap = () => {
 
         {/* Top Bar */}
         <View className="bg-blue-600 px-4 py-3 shadow-md z-10 pt-10">
-          <Text className="text-white text-2xl font-bold text-center">
-            <Siren color="white" /> Location <Siren color="white" />
-          </Text>
-          <View className="flex flex-row justify-center gap-2 p-2">
-            <MapPinned color="white" />
+          <View className="flex-row justify-center items-center gap-2 mb-2">
+            <Image
+              source={require("./../../assets/icons/siren.svg")}
+              style={{ tintColor: "#fff" }}
+              resizeMode="contain"
+            />
+            <Text className="text-white text-2xl font-bold">Location</Text>
+            <Image
+              source={require("./../../assets/icons/siren.svg")}
+              style={{ tintColor: "#fff"}}
+              resizeMode="contain"
+            />
+          </View>
+
+          <View className="flex-row justify-center items-center gap-2 p-2">
+            <Image
+              source={require("./../../assets/icons/map-pinned.svg")}
+              style={{ tintColor: "#fff", width: 18, height: 18 }}
+              resizeMode="contain"
+            />
             <Text className="text-white">Bhandarwada Hill Reservoir</Text>
           </View>
         </View>
@@ -492,13 +504,21 @@ const LiveTrackingMap = () => {
                 >
                   <View className="flex-row items-center">
                     <View className="bg-white w-11 h-11 rounded-full justify-center items-center mr-4">
-                      <Navigation color="#22c55e" />
+                      <Image
+                        source={require("./../../assets/icons/navigation.svg")}
+                        style={{ tintColor: "#22c55e" }}
+                        resizeMode="contain"
+                      />
                     </View>
                     <View className="flex-1">
                       <Text className="text-base font-semibold text-white">Open in Google Maps</Text>
                       <Text className="text-xs text-white/80 mt-0.5">Navigate to destination</Text>
                     </View>
-                    <ChevronRight color="white" />
+                    <Image
+                      source={require("./../../assets/icons/chevron-right.svg")}
+                      style={{ tintColor: "#fff" }}
+                      resizeMode="contain"
+                    />
                   </View>
                 </TouchableOpacity>
                 <Link className="pl-4" href={{ pathname: "/ems/DropOff", params: { bookingId: bookingId } }}>
@@ -515,7 +535,11 @@ const LiveTrackingMap = () => {
                   <View
                     className={`${activeStatus === "ARRIVED" || activeStatus === "IN_TRANSIT" || activeStatus === "REACHED" ? "bg-blue-500" : "bg-gray-400"} w-11 h-11 rounded-full justify-center items-center mr-4`}
                   >
-                    <MapPinned color="#fff" />
+                    <Image
+                      source={require("./../../assets/icons/map-pinned.svg")}
+                      style={{ tintColor: "#fff" }}
+                      resizeMode="contain"
+                    />
                   </View>
                   <View className="flex-1">
                     <Text
@@ -525,12 +549,19 @@ const LiveTrackingMap = () => {
                     </Text>
                     <Text className="text-xs text-gray-500 mt-0.5">Select destination for ambulance</Text>
                   </View>
-                  <ChevronRight
-                    color={
-                      activeStatus === "ARRIVED" || activeStatus === "IN_TRANSIT" || activeStatus === "REACHED"
-                        ? "#2196F3"
-                        : "#9E9E9E"
-                    }
+                  <Image
+                    source={require("./../../assets/icons/chevron-right.svg")}
+                    style={{
+                      width: 24,
+                      height: 24,
+                      tintColor:
+                        activeStatus === "ARRIVED" ||
+                        activeStatus === "IN_TRANSIT" ||
+                        activeStatus === "REACHED"
+                          ? "#2196F3"
+                          : "#9E9E9E",
+                    }}
+                    resizeMode="contain"
                   />
                 </View>
               </TouchableOpacity>

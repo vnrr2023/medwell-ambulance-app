@@ -1,5 +1,3 @@
-"use client"
-
 import { useEffect, useRef, useState } from "react"
 import { SafeAreaView, View, ActivityIndicator, Animated } from "react-native"
 import { Image } from "expo-image"

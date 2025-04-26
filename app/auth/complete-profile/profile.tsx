@@ -1,5 +1,3 @@
-"use client"
-
 import { useState, useEffect } from "react"
 import { View, Text, TextInput, Image, TouchableOpacity, ActivityIndicator, SafeAreaView, Alert } from "react-native"
 import axios from "axios"
